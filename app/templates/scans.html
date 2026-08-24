@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Scans · NetGuard{% endblock %}
+{% block content %}
+<h1>Scans</h1>
+
+<div class="panel">
+  {% if error %}<div class="error">{{ error }}</div>{% endif %}
+  {% if not allowlist %}
+    <div class="hint">No authorized ranges configured yet — add one under <a href="/settings">Settings</a> before you can scan.</div>
+  {% endif %}
+  <form method="post" action="/scans/new">
+    <label>Target (IP, host, or CIDR — must be within an authorized range)</label>
+    <input type="text" name="target" class="mono" placeholder="e.g. 192.168.1.0/24" required>
+    <label>Scan type</label>
+    <select name="scan_type">
+      <option value="discovery">Discovery (hosts + open ports + services, via nmap)</option>
+      <option value="vuln">Vulnerability scan — quick (default creds, exposures, router/IoT CVEs — ~1-3 min/host)</option>
+      <option value="vuln_deep">Vulnerability scan — deep (full CVE template set, all software — much slower)</option>
+    </select>
+    <div class="checkbox-row">
+      <input type="checkbox" name="confirm_authorized" id="confirm" value="yes" required>
+      <label for="confirm" style="margin:0;">I confirm I own or am explicitly authorized to scan this target.</label>
+    </div>
+    <button type="submit">Start scan</button>
+  </form>
+</div>
+
+<h2>History</h2>
+{% if jobs %}
+<table id="jobs-table">
+  <tr><th>Target</th><th>Type</th><th>Status</th><th>Hosts</th><th>Findings</th><th>Started</th><th>Notes</th></tr>
+  {% for j in jobs %}
+  <tr data-job-id="{{ j.id }}">
+    <td class="mono">{{ j.target }}</td>
+    <td>{{ j.scan_type }}</td>
+    <td class="status-cell"><span class="badge {{ j.status }}">{{ j.status }}</span></td>
+    <td class="hosts-cell">{{ j.hosts_found }}</td>
+    <td class="findings-cell">{{ j.findings_found }}</td>
+    <td>{{ j.created_at.strftime('%Y-%m-%d %H:%M') }} UTC</td>
+    <td class="notes-cell hint">{{ j.error_message or '' }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<div class="empty">No scans yet.</div>
+{% endif %}
+
+<script>
+// Lightweight polling (no external JS libs) to refresh in-flight job status.
+async function refreshJobs() {
+  try {
+    const res = await fetch('/scans/status.json');
+    if (!res.ok) return;
+    const jobs = await res.json();
+    for (const j of jobs) {
+      const row = document.querySelector(`tr[data-job-id="${j.id}"]`);
+      if (!row) continue;
+      row.querySelector('.status-cell').innerHTML = `<span class="badge ${j.status}">${j.status}</span>`;
+      row.querySelector('.hosts-cell').textContent = j.hosts_found;
+      row.querySelector('.findings-cell').textContent = j.findings_found;
+      row.querySelector('.notes-cell').textContent = j.error_message || '';
+    }
+  } catch (e) { /* silent */ }
+}
+setInterval(refreshJobs, 4000);
+</script>
+{% endblock %}

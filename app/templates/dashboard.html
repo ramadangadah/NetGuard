@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Overview · NetGuard{% endblock %}
+{% block content %}
+<h1>Overview</h1>
+<div class="grid">
+  <div class="card"><div class="num">{{ host_count }}</div><div class="label">Assets discovered</div></div>
+  <div class="card"><div class="num">{{ total_findings }}</div><div class="label">Total findings</div></div>
+  <div class="card"><div class="num" style="color:var(--crit)">{{ severity_counts.critical }}</div><div class="label">Critical</div></div>
+  <div class="card"><div class="num" style="color:var(--high)">{{ severity_counts.high }}</div><div class="label">High</div></div>
+  <div class="card"><div class="num" style="color:var(--med)">{{ severity_counts.medium }}</div><div class="label">Medium</div></div>
+  <div class="card"><div class="num" style="color:var(--low)">{{ severity_counts.low }}</div><div class="label">Low</div></div>
+</div>
+
+<h2>Recent scans</h2>
+{% if recent_jobs %}
+<table>
+  <tr><th>Target</th><th>Type</th><th>Status</th><th>Hosts</th><th>Findings</th><th>Started</th></tr>
+  {% for j in recent_jobs %}
+  <tr>
+    <td class="mono">{{ j.target }}</td>
+    <td>{{ j.scan_type }}</td>
+    <td><span class="badge {{ j.status }}">{{ j.status }}</span></td>
+    <td>{{ j.hosts_found }}</td>
+    <td>{{ j.findings_found }}</td>
+    <td>{{ j.created_at.strftime('%Y-%m-%d %H:%M') }} UTC</td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<div class="empty">No scans yet. <a href="/scans">Run your first scan</a>.</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,32 @@
+services:
+  netguard:
+    build: .
+    image: netguard-dashboard:latest
+    container_name: netguard
+    restart: unless-stopped
+    ports:
+      - "${HOST_PORT:-8080}:8000"
+    environment:
+      # First-run admin account. Change ADMIN_PASSWORD before first start,
+      # or leave it unset to have a random one generated and printed once
+      # to `docker compose logs netguard` on first boot.
+      ADMIN_USERNAME: "${ADMIN_USERNAME:-admin}"
+      ADMIN_PASSWORD: "${ADMIN_PASSWORD:-}"
+      # Comma-separated CIDRs you're authorized to scan. You can also add
+      # these later from the Settings page in the UI -- this just
+      # pre-seeds them so a fresh deploy doesn't need manual setup.
+      # SCAN_ALLOWLIST: "192.168.1.0/24"
+      MAX_CONCURRENT_SCANS: "${MAX_CONCURRENT_SCANS:-1}"
+    volumes:
+      - netguard_data:/app/data
+    # Uncomment to allow SYN scans + OS fingerprinting (nmap -sS/-O) instead
+    # of the default unprivileged TCP-connect scan. Only enable this if you
+    # understand the tradeoff: the container gets raw-socket access.
+    # cap_add:
+    #   - NET_RAW
+    #   - NET_ADMIN
+    mem_limit: 768m
+    cpus: 1.5
+
+volumes:
+  netguard_data:

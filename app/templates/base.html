@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}NetGuard{% endblock %}</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+{% if username %}
+<div class="topbar">
+  <div class="brand">Net<span>Guard</span></div>
+  <nav>
+    <a href="/" class="{{ 'active' if request.url.path == '/' }}">Overview</a>
+    <a href="/hosts" class="{{ 'active' if request.url.path == '/hosts' }}">Assets</a>
+    <a href="/findings" class="{{ 'active' if request.url.path == '/findings' }}">Findings</a>
+    <a href="/scans" class="{{ 'active' if request.url.path == '/scans' }}">Scans</a>
+    <a href="/settings" class="{{ 'active' if request.url.path == '/settings' }}">Settings</a>
+  </nav>
+  <div class="userbox">{{ username }} <a href="/logout">Log out</a></div>
+</div>
+{% endif %}
+<div class="wrap">
+  {% block content %}{% endblock %}
+</div>
+</body>
+</html>

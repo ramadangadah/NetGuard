@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Assets · NetGuard{% endblock %}
+{% block content %}
+<h1>Assets</h1>
+{% if hosts %}
+<table>
+  <tr><th>IP</th><th>Hostname</th><th>Vendor / OS</th><th>Open ports</th><th>Findings</th><th>Last seen</th></tr>
+  {% for h in hosts %}
+  <tr>
+    <td class="mono">{{ h.ip }}</td>
+    <td>{{ h.hostname or '—' }}</td>
+    <td>{{ h.vendor or h.os_guess or '—' }}</td>
+    <td>
+      {% for p in ports_by_host[h.id] %}
+        <span class="mono">{{ p.port }}/{{ p.protocol }}{% if p.service %} ({{ p.service }}{% if p.version %} {{ p.version }}{% endif %}){% endif %}</span>{% if not loop.last %}, {% endif %}
+      {% else %}—{% endfor %}
+    </td>
+    <td>
+      {% set fc = findings_by_host[h.id]|length %}
+      {% if fc > 0 %}<a href="/findings">{{ fc }}</a>{% else %}0{% endif %}
+    </td>
+    <td>{{ h.last_seen.strftime('%Y-%m-%d %H:%M') }} UTC</td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<div class="empty">No assets discovered yet. <a href="/scans">Run a discovery scan</a>.</div>
+{% endif %}
+{% endblock %}

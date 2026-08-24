@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Findings · NetGuard{% endblock %}
+{% block content %}
+<h1>Findings</h1>
+{% if findings %}
+<table>
+  <tr><th>Severity</th><th>Name</th><th>Host</th><th>CVE</th><th>Found</th></tr>
+  {% for f in findings %}
+  <tr>
+    <td><span class="badge {{ f.severity }}">{{ f.severity }}</span></td>
+    <td>
+      {{ f.name }}
+      {% if f.description %}<div class="hint">{{ f.description[:160] }}{% if f.description|length > 160 %}…{% endif %}</div>{% endif %}
+      {% if f.reference %}<div class="hint"><a href="{{ f.reference }}" target="_blank" rel="noopener">reference ↗</a></div>{% endif %}
+    </td>
+    <td class="mono">{{ hosts[f.host_id].ip if f.host_id in hosts else '—' }}</td>
+    <td class="mono">{{ f.cve_id or '—' }}</td>
+    <td>{{ f.found_at.strftime('%Y-%m-%d %H:%M') }} UTC</td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<div class="empty">No findings yet. Run a vulnerability scan from the Scans page.</div>
+{% endif %}
+{% endblock %}

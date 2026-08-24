@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Settings · NetGuard{% endblock %}
+{% block content %}
+<h1>Settings</h1>
+
+<h2>Vulnerability templates</h2>
+<div class="panel">
+  <div class="hint">Nuclei's detection templates (default credentials, CVEs, exposures) are baked into this image at build time. Pull the latest set from the community template repo without rebuilding.</div>
+  {% if update_result %}
+    {% if update_result.ok %}
+      <div class="hint" style="color:var(--ok); margin-top:10px;">Templates updated successfully.</div>
+    {% else %}
+      <div class="error" style="margin-top:10px;">Update failed: {{ update_result.output or 'unknown error' }}</div>
+    {% endif %}
+  {% endif %}
+  <form method="post" action="/settings/update-templates">
+    <button type="submit" class="secondary">Update templates now</button>
+  </form>
+</div>
+
+<h2>Authorized scan ranges</h2>
+<div class="panel">
+  <div class="hint">Scans can only target IPs/CIDRs inside these ranges. Add only networks you own or are explicitly authorized to test.</div>
+  {% if entries %}
+  <table style="margin-top:14px;">
+    <tr><th>CIDR</th><th>Label</th><th></th></tr>
+    {% for e in entries %}
+    <tr>
+      <td class="mono">{{ e.cidr }}</td>
+      <td>{{ e.label or '—' }}</td>
+      <td>
+        <form method="post" action="/settings/allowlist/delete/{{ e.id }}" style="display:inline;">
+          <button type="submit" class="danger" style="margin:0;">Remove</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+  <form method="post" action="/settings/allowlist/add" style="margin-top:16px;">
+    <label>CIDR</label>
+    <input type="text" name="cidr" class="mono" placeholder="192.168.1.0/24" required>
+    <label>Label (optional)</label>
+    <input type="text" name="label" placeholder="Office LAN">
+    <button type="submit">Add range</button>
+  </form>
+</div>
+
+<h2>Dashboard users</h2>
+<div class="panel">
+  <table>
+    <tr><th>Username</th><th>Created</th><th></th></tr>
+    {% for u in users %}
+    <tr>
+      <td>{{ u.username }}</td>
+      <td>{{ u.created_at.strftime('%Y-%m-%d') }}</td>
+      <td>
+        {% if u.username != username %}
+        <form method="post" action="/settings/users/delete/{{ u.id }}" style="display:inline;">
+          <button type="submit" class="danger" style="margin:0;">Remove</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  <form method="post" action="/settings/users/add" style="margin-top:16px;">
+    <label>New username</label>
+    <input type="text" name="new_username" required>
+    <label>Password (min 8 characters)</label>
+    <input type="password" name="new_password" minlength="8" required>
+    <button type="submit">Add user</button>
+  </form>
+</div>
+{% endblock %}
