@@ -2,7 +2,7 @@ FROM python:3.11-slim AS base
 
 # --- system deps: nmap for discovery, git+ca-certs to fetch nuclei templates ---
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends nmap git ca-certificates curl unzip procps \
+    && apt-get install -y --no-install-recommends nmap git ca-certificates curl unzip procps sqlite3 \
     && rm -rf /var/lib/apt/lists/*
 
 # --- nuclei binary (static Go binary from upstream release) ---

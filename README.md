@@ -124,6 +124,26 @@ Results land on **Assets** (hosts + open ports) and **Findings**
 (vulnerabilities, sorted by severity, with CVE IDs and references where
 available).
 
+### About discovery scanning through a firewall
+
+Discovery scans skip nmap's normal ping-based host-discovery step by
+default and probe every address directly (`-Pn`). This matters a lot if
+you're scanning a network from this Oracle instance over the internet or a
+VPN rather than sitting directly on the target LAN: firewalls very
+commonly drop ICMP and the other discovery probes even when the actual
+service ports are wide open, and without `-Pn` nmap concludes those hosts
+are "down" and silently skips them — a scan that finds nothing, with no
+error anywhere, even though the target is completely reachable. We
+verified this concretely: the exact same target with the exact same open
+port reported "0 hosts up" without `-Pn` and correctly found the host and
+port with it enabled.
+
+The tradeoff: every address in a range gets fully port-probed instead of
+dead ones being skipped early, so scans of large ranges with mostly unused
+addresses take longer. If you're scanning a LAN you know doesn't block
+ICMP and want the faster behavior back, set `NMAP_SKIP_HOST_DISCOVERY=false`
+as an environment variable in `docker-compose.yml`.
+
 ## 4. Keeping vulnerability templates current
 
 The image bakes in a snapshot of `nuclei-templates` at build time. To pull
@@ -160,6 +180,28 @@ rebuild:
 ```bash
 sudo docker compose up -d
 ```
+
+## 5b. Debugging a scan directly
+
+`ps` and `sqlite3` are both available inside the container, so you can
+check what's actually happening without going through the browser:
+
+```bash
+# Is a scan process actually running right now?
+sudo docker compose exec netguard ps aux
+
+# What does the database say about your scan jobs?
+sudo docker compose exec netguard sqlite3 /app/data/netguard.db \
+  "select id,target,scan_type,status,hosts_found,findings_found,error_message from scanjob;"
+
+# Live resource usage
+sudo docker stats netguard --no-stream
+```
+
+A `running` job with an active nmap/nuclei process in `ps aux` and
+climbing CPU is healthy and just needs time. A `running` job with no such
+process and flat resource usage that's been stuck for several minutes is
+worth investigating further (check `docker compose logs` for a crash).
 
 ## 6. Scan privileges (SYN scan / OS fingerprinting)
 

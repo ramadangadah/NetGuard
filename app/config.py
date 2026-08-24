@@ -43,6 +43,16 @@ NUCLEI_BIN = os.environ.get("NUCLEI_BIN", "nuclei")
 NUCLEI_TEMPLATES_DIR = os.environ.get("NUCLEI_TEMPLATES_DIR", "/opt/nuclei-templates")
 NMAP_TIMING = os.environ.get("NMAP_TIMING", "-T4")  # aggressive-but-safe default timing template
 MAX_CONCURRENT_SCANS = int(os.environ.get("MAX_CONCURRENT_SCANS", "1"))
+# Skip nmap's ping-based host discovery and probe every address directly
+# (-Pn). Default ON: scanning a network over the internet/VPN from a cloud
+# VM very commonly has ICMP/discovery probes dropped by a firewall even
+# though the real service ports are reachable -- without this, nmap marks
+# those hosts "down" and silently skips them, which looks identical to
+# "the scan ran and found nothing." Set to "false" if you're scanning a
+# LAN directly and know ICMP isn't blocked, for faster scans.
+NMAP_SKIP_HOST_DISCOVERY = os.environ.get("NMAP_SKIP_HOST_DISCOVERY", "true").strip().lower() not in (
+    "false", "0", "no",
+)
 
 # Safety guard: scans are only allowed against CIDR ranges the admin has
 # explicitly allow-listed. Comma-separated, e.g. "192.168.1.0/24,10.0.0.0/8".
