@@ -138,12 +138,28 @@ Rebuilding the image (`docker compose up -d --build`) also refreshes it.
 
 ## 5. Resource footprint
 
-Defaults (`docker-compose.yml`) cap the container at 768MB RAM / 1.5 CPUs,
-which is comfortable for scanning a typical office LAN (a few dozen to a
-few hundred hosts) on a small Oracle Free Tier / Always Free ARM or x86
-shape. `MAX_CONCURRENT_SCANS` (in `.env`) keeps only one scan running at a
-time by default — bump it if your instance has more headroom and you want
-to run discovery and a vuln scan in parallel.
+Defaults (`docker-compose.yml`) cap the container at 2GB RAM / 1.5 CPUs.
+Nuclei's own memory use is the main driver here -- just loading its ~11k
+community templates before a single request goes out can hold 700MB-1GB+
+RSS, on top of nmap and the app itself, so a tight cap (we originally
+shipped 768MB) causes it to get silently OOM-killed by the container
+cgroup rather than failing with a visible error. If your instance has less
+than ~3GB total RAM, check `free -h` on the host first: Docker can't hand
+a container more memory than the host actually has. On Oracle's smallest
+Always Free shape (`VM.Standard.E2.1.Micro`, 1GB RAM total) this app will
+not run comfortably -- use an Ampere A1 Always Free shape instead (up to
+24GB RAM available across your Always Free A1 instances) or a paid shape
+with at least 4GB.
+
+`MAX_CONCURRENT_SCANS` (in `.env`) keeps only one scan running at a time
+by default — each concurrent scan roughly multiplies nuclei's memory use,
+so only raise this if you've confirmed the host has RAM to spare.
+
+Applying a memory-limit change alone (no code changed) doesn't need a
+rebuild:
+```bash
+sudo docker compose up -d
+```
 
 ## 6. Scan privileges (SYN scan / OS fingerprinting)
 
