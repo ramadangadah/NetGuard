@@ -3,12 +3,22 @@ Discovery / port-scan engine built on nmap. We ask nmap for XML output
 (-oX -) and parse it, rather than screen-scraping text, so results are
 reliable across nmap versions.
 """
+import ipaddress
 import os
 import subprocess
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 
-from app.config import NMAP_BIN, NMAP_TIMING, NMAP_SKIP_HOST_DISCOVERY
+from app.config import (
+    NMAP_BIN,
+    NMAP_TIMING,
+    NMAP_SKIP_HOST_DISCOVERY,
+    NMAP_MIN_RATE,
+    NMAP_HOST_TIMEOUT_SEC,
+    NMAP_TIMEOUT_SEC_PER_ADDRESS,
+    NMAP_TIMEOUT_FLOOR_SEC,
+    NMAP_TIMEOUT_CAP_SEC,
+)
 
 
 @dataclass
@@ -35,7 +45,30 @@ class NmapError(RuntimeError):
     pass
 
 
-def run_discovery_scan(target: str, top_ports: int = 1000, timeout_sec: int = 900) -> list[HostResult]:
+def estimate_address_count(target: str) -> int:
+    """Best-effort count of addresses implied by a target (CIDR or bare host)."""
+    try:
+        net = ipaddress.ip_network(target if "/" in target else f"{target}/32", strict=False)
+        return net.num_addresses
+    except ValueError:
+        return 1
+
+
+def compute_timeout_sec(target: str) -> int:
+    """
+    Scale the overall subprocess timeout to the size of the target range,
+    bounded by a floor (so small scans still get a reasonable minimum) and
+    a hard cap (so a huge range fails fast with a clear error instead of
+    running for the better part of a day). This is a safety net, not the
+    primary speed control -- --min-rate/--host-timeout in the nmap command
+    itself are what keep real scan time well under this in practice.
+    """
+    addr_count = estimate_address_count(target)
+    scaled = addr_count * NMAP_TIMEOUT_SEC_PER_ADDRESS
+    return max(NMAP_TIMEOUT_FLOOR_SEC, min(scaled, NMAP_TIMEOUT_CAP_SEC))
+
+
+def run_discovery_scan(target: str, top_ports: int = 1000, timeout_sec: int | None = None) -> list[HostResult]:
     """
     Host + service discovery: top N TCP ports, service/version detection
     (-sV). The container runs unprivileged by default, so nmap falls back
@@ -52,17 +85,32 @@ def run_discovery_scan(target: str, top_ports: int = 1000, timeout_sec: int = 90
     service ports are reachable. Without -Pn, nmap would mark those hosts
     "down" from the failed ping and silently skip scanning them entirely,
     which looks exactly like "the scan ran and found nothing" with no error
-    anywhere. The tradeoff is a slower scan on a large range with mostly
-    unused addresses, since every address gets probed instead of the dead
-    ones being skipped early -- set NMAP_SKIP_HOST_DISCOVERY=false to restore
-    the faster ping-first behavior if you're scanning a LAN where you know
-    ICMP isn't blocked.
+    anywhere. Set NMAP_SKIP_HOST_DISCOVERY=false to restore the faster
+    ping-first behavior if you're scanning a LAN where you know ICMP isn't
+    blocked.
+
+    -Pn's own tradeoff is that nmap can't distinguish "no response yet" from
+    "network congestion" on a range where most addresses never answer (e.g.
+    a /24 where only a handful of IPs are in use), and its adaptive timing
+    throttles itself down defensively -- which can make a scan crawl to a
+    near-stop rather than just taking somewhat longer. --min-rate forces a
+    packet-rate floor to counter that, --host-timeout bounds how long any
+    one unresponsive address can eat into the budget, and the overall
+    subprocess timeout scales with the target's size (see
+    compute_timeout_sec) instead of a single fixed number that works for a
+    single host but not a /24.
     """
+    if timeout_sec is None:
+        timeout_sec = compute_timeout_sec(target)
+
     cmd = [
         NMAP_BIN,
         NMAP_TIMING,
         "-sV",
+        "-n",  # skip reverse DNS lookups -- pure overhead for an IP-based asset inventory
         "--top-ports", str(top_ports),
+        "--min-rate", str(NMAP_MIN_RATE),
+        "--host-timeout", f"{NMAP_HOST_TIMEOUT_SEC}s",
         "-oX", "-",
     ]
     if NMAP_SKIP_HOST_DISCOVERY:
@@ -75,7 +123,11 @@ def run_discovery_scan(target: str, top_ports: int = 1000, timeout_sec: int = 90
             cmd, capture_output=True, text=True, timeout=timeout_sec, check=False
         )
     except subprocess.TimeoutExpired as exc:
-        raise NmapError(f"nmap timed out after {timeout_sec}s scanning {target}") from exc
+        raise NmapError(
+            f"nmap timed out after {timeout_sec}s scanning {target} "
+            f"({estimate_address_count(target)} addresses). Try a smaller range, "
+            f"or raise NMAP_TIMEOUT_SEC_PER_ADDRESS / NMAP_TIMEOUT_CAP_SEC."
+        ) from exc
 
     if proc.returncode not in (0,) or not proc.stdout.strip():
         raise NmapError(f"nmap failed (code {proc.returncode}): {proc.stderr.strip()[:500]}")

@@ -108,8 +108,14 @@ If you'd rather use a different host port, just change `HOST_PORT` in
 From the **Scans** page:
 
 - **Discovery** — nmap sweep of the target: live hosts, open ports,
-  service/version banners. Run this first so the vulnerability scan knows
-  what to target.
+  service/version banners. **Run this first** — a vulnerability scan needs
+  it to know what to target. If you run a vuln scan against a range where
+  Discovery hasn't found any hosts yet, it now fails immediately with a
+  clear message telling you to run Discovery first, rather than silently
+  falling back to blindly probing every address in the range on just the
+  default web ports (which used to report a hollow "done, 0 findings" that
+  looked like a real result but wasn't actually targeting anything Discovery
+  had confirmed).
 - **Vulnerability scan — quick** — the default. Runs nuclei against every
   port discovery found, using a focused template set (default credentials,
   exposed files/panels, router/IoT/camera/print CVEs, misconfigurations).
@@ -143,6 +149,33 @@ dead ones being skipped early, so scans of large ranges with mostly unused
 addresses take longer. If you're scanning a LAN you know doesn't block
 ICMP and want the faster behavior back, set `NMAP_SKIP_HOST_DISCOVERY=false`
 as an environment variable in `docker-compose.yml`.
+
+**Scaling and timeouts for larger ranges.** With `-Pn` active, nmap can't
+tell "no response yet" apart from "the network is congested" on a range
+where most addresses are unused, and its adaptive timing throttles itself
+down defensively -- which can turn a /24 scan from "somewhat slower" into
+"basically stalled." To counter that:
+
+- `--min-rate` forces a packet-rate floor so the scan doesn't crawl to a
+  near-stop (`NMAP_MIN_RATE`, default 300).
+- `--host-timeout` caps how long any single unresponsive address can eat
+  into the budget (`NMAP_HOST_TIMEOUT_SEC`, default 300s).
+- `-n` skips reverse DNS lookups, which are pure overhead for an
+  IP-based inventory.
+- The overall per-scan timeout now scales with target size instead of a
+  single fixed number: `NMAP_TIMEOUT_SEC_PER_ADDRESS` (default 20s/address)
+  bounded by `NMAP_TIMEOUT_FLOOR_SEC` (900s minimum) and
+  `NMAP_TIMEOUT_CAP_SEC` (3h maximum). A /24 gets roughly 85 minutes by
+  default instead of the old fixed 15 minutes that a large range could
+  never realistically finish within.
+- Scans against a target larger than `MAX_SCAN_ADDRESSES` (default 4096,
+  i.e. bigger than a /20) are rejected immediately with a clear error
+  instead of silently attempting a multi-hour scan — split a range that
+  large into smaller pieces.
+
+All of these are environment variables you can override in
+`docker-compose.yml` if your network's behavior calls for different
+tuning.
 
 ## 4. Keeping vulnerability templates current
 

@@ -8,6 +8,7 @@ import ipaddress
 
 from sqlmodel import Session, select
 
+from app.config import MAX_SCAN_ADDRESSES
 from app.models import AllowlistEntry
 
 
@@ -37,6 +38,15 @@ def assert_in_scope(session: Session, target: str) -> None:
         target_net = _to_network(target)
     except ValueError as exc:
         raise ScopeError(f"'{target}' is not a valid IP, host, or CIDR range: {exc}") from exc
+
+    if target_net.num_addresses > MAX_SCAN_ADDRESSES:
+        raise ScopeError(
+            f"'{target}' covers {target_net.num_addresses} addresses, which is above the "
+            f"{MAX_SCAN_ADDRESSES}-address limit for a single scan (a /24 is 256; raise "
+            "MAX_SCAN_ADDRESSES if you really need a larger range). Split it into smaller "
+            "ranges instead -- a scan this large would otherwise run for hours before you "
+            "find out whether it even worked."
+        )
 
     for cidr in allowlist:
         try:

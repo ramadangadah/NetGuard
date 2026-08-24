@@ -151,8 +151,7 @@ def _run_vuln(job_id: int, deep: bool = False) -> None:
     with Session(engine) as session:
         job = session.get(ScanJob, job_id)
         target = job.target
-        # Vuln scan targets hosts already known from discovery within scope,
-        # falling back to the raw target if nothing's been discovered yet.
+        # Vuln scan targets hosts already known from discovery within scope.
         hosts = session.exec(select(Host)).all()
         import ipaddress
         net = ipaddress.ip_network(target if "/" in target else f"{target}/32", strict=False)
@@ -173,8 +172,27 @@ def _run_vuln(job_id: int, deep: bool = False) -> None:
                     # every template's timeout budget on non-TLS ports and
                     # made scans take 5-10x longer for no extra coverage.
                     targets.append(f"{h.ip}:{p.port}")
-        else:
+        elif net.num_addresses == 1:
+            # A single bare host/IP with nothing discovered yet is still a
+            # sensible thing to hand straight to nuclei -- it'll probe the
+            # default web ports itself.
             targets = [target]
+        else:
+            # No hosts discovered in this range yet. Falling back to handing
+            # nuclei the raw CIDR here is a real trap: nuclei silently
+            # expands a CIDR into every individual address and scans each
+            # one on the default web ports only -- for a /24 that's 256
+            # blind probes ignoring whatever ports Discovery would have
+            # actually found open, and for anything bigger it can turn into
+            # tens of thousands of pointless probes that just run until the
+            # timeout kills them. Refuse clearly instead of quietly doing
+            # something close to useless and reporting "done, 0 findings"
+            # as if it were a real result.
+            raise NucleiError(
+                f"No hosts have been discovered in {target} yet. Run a Discovery scan on "
+                "this range first so the vulnerability scan knows which hosts and ports to "
+                "actually target, instead of blindly probing every address in the range."
+            )
 
     tags = DEEP_TAGS if deep else QUICK_TAGS
     findings = run_vuln_scan(targets, tags=tags)

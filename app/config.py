@@ -54,6 +54,32 @@ NMAP_SKIP_HOST_DISCOVERY = os.environ.get("NMAP_SKIP_HOST_DISCOVERY", "true").st
     "false", "0", "no",
 )
 
+# With -Pn active, nmap can't tell "no response yet" apart from "network
+# congestion" and throttles itself down defensively when scanning a range
+# where most addresses never answer at all -- exactly the case for a /24
+# where only a few IPs are actually in use. --min-rate forces a packet-rate
+# floor so the scan doesn't crawl to a near-stop on ranges like that.
+NMAP_MIN_RATE = int(os.environ.get("NMAP_MIN_RATE", "300"))
+
+# Caps how long nmap will spend on any single unresponsive host, so one
+# black-holed address can't eat an unbounded share of the scan budget.
+NMAP_HOST_TIMEOUT_SEC = int(os.environ.get("NMAP_HOST_TIMEOUT_SEC", "300"))
+
+# Outer safety-net timeout for the whole nmap subprocess, in seconds per
+# address in the target range (on top of a fixed floor and a hard cap) --
+# see run_discovery_scan() for how this is applied. This is intentionally
+# generous; --min-rate/--host-timeout above are what actually keep real
+# scan time well under this ceiling in practice.
+NMAP_TIMEOUT_SEC_PER_ADDRESS = int(os.environ.get("NMAP_TIMEOUT_SEC_PER_ADDRESS", "20"))
+NMAP_TIMEOUT_FLOOR_SEC = int(os.environ.get("NMAP_TIMEOUT_FLOOR_SEC", "900"))
+NMAP_TIMEOUT_CAP_SEC = int(os.environ.get("NMAP_TIMEOUT_CAP_SEC", "10800"))  # 3h
+
+# Reject scans against a range larger than this many addresses outright,
+# with a clear error, instead of letting someone submit e.g. a /16 and
+# have it silently run for the better part of a day. This app is sized for
+# office-network-scale ranges; /20 (4096 addresses) is already generous.
+MAX_SCAN_ADDRESSES = int(os.environ.get("MAX_SCAN_ADDRESSES", "4096"))
+
 # Safety guard: scans are only allowed against CIDR ranges the admin has
 # explicitly allow-listed. Comma-separated, e.g. "192.168.1.0/24,10.0.0.0/8".
 # Empty by default -- admin must configure this before any scan can run.
